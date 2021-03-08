@@ -15,45 +15,52 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Connect() (*mongo.Client, context.Context, context.CancelFunc) {
+func MHBulider() MongoHelper {
+	var mh MongoHelper = MongoHelper{}
+	mh.Init()
+	mh.Connection()
+	return mh
+}
+
+type MongoHelper struct {
+	client *mongo.Client
+	url    string
+	ctx    context.Context
+	// collection mongo.Collection
+}
+
+func (mh *MongoHelper) Init() {
 	var url string = "mongodb://167.179.80.227:5569"
-	client, err := mongo.NewClient(options.Client().ApplyURI(url))
+	mh.url = url
+}
+
+func (mh *MongoHelper) Connection() {
+	client, err := mongo.NewClient(options.Client().ApplyURI(mh.url))
 
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return client, ctx, cancel
+	mh.client = client
+	mh.ctx = ctx
 }
 
-func GetCursor(client *mongo.Client, dbName string, collectionName string) *mongo.Collection {
-	db := client.Database(dbName)
+func (mh *MongoHelper) GetCollection(dbName string, collectionName string) *mongo.Collection {
+	db := mh.client.Database(dbName)
 	collection := db.Collection(collectionName)
 	return collection
 }
 
-func getAll(ctx context.Context, c *mongo.Collection) []bson.M {
-	cur, err := c.Find(ctx, bson.D{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cur.Close(ctx)
-	var results []bson.M
-	err = cur.All(ctx, &results)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return results
+func (mh *MongoHelper) DisConnection() {
+	mh.client.Disconnect(mh.ctx)
 }
 
-func GetCollection(dbName string, collectionName string) (*mongo.Collection, context.CancelFunc, *mongo.Client) {
-	client, _, cancel := Connect()
-	collection := GetCursor(client, dbName, collectionName)
-	return collection, cancel, client
+func (mh *MongoHelper) DropCollection(collection *mongo.Collection) {
+	collection.Drop(mh.ctx)
 }
 
 func MakeErrResp(err string) gin.H {

@@ -28,6 +28,7 @@ func RouterInit() {
 
 	r.POST("/api/stock/", api.AddStock)
 	r.GET("/api/stocks", api.GetStocks)
+
 	// r.DELETE(("/api/user/:id"), api.DeleteUser)
 	// r.PUT("/api/user/:id", api.PutUser)
 	// r.GET("/api/user/:id", api.GetUser)
