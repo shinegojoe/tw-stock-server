@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"goServer/src/helper/logHelper"
 	"goServer/src/helper/mongoHelper"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,7 @@ func MakeErrResp(msg string) gin.H {
 
 func ResponseHelper(ctx *gin.Context, statusCode int, res gin.H, err error) {
 	if err != nil {
+		logHelper.LogToFile(err.Error())
 		var res gin.H = MakeErrResp(err.Error())
 		ctx.JSON(statusCode, res)
 		return

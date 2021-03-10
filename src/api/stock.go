@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 
+	"goServer/src/helper/logHelper"
 	"goServer/src/helper/mongoHelper"
 	"goServer/src/helper/utils"
 
@@ -16,12 +17,14 @@ func AddStock(ctx *gin.Context) {
 	var model map[string]interface{}
 	err := ctx.BindJSON(&model)
 	if err != nil {
+		logHelper.LogToFile(err.Error())
 		ctx.JSON(200, utils.MakeErrResp(err.Error()))
 		return
 	}
 	fmt.Println("model", model)
 	connectionHelper, err := mongoHelper.MHBulider()
 	if err != nil {
+		logHelper.LogToFile(err.Error())
 		ctx.JSON(200, utils.MakeErrResp(err.Error()))
 		return
 	}
@@ -32,8 +35,10 @@ func AddStock(ctx *gin.Context) {
 	err = collection.FindOne(ctx, model).Decode(&stock)
 	if err != nil {
 		res, err := mongoHelper.InsertOne(collection, model, "stock")
+
 		utils.ResponseHelper(ctx, 200, res, err)
 	} else {
+		logHelper.LogToFile("data is exists")
 		ctx.JSON(200, gin.H{
 			"status":  "ok",
 			"message": "data is exists",
