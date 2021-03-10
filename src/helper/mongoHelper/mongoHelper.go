@@ -1,6 +1,7 @@
 package mongoHelper
 
 import (
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -9,57 +10,60 @@ import (
 
 	// "go.mongodb.org/mongo-driver/mongo/readpref"
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/gin-gonic/gin"
 )
 
-func MHBulider() MongoHelper {
-	var mh MongoHelper = MongoHelper{}
+func MHBulider() (ConnectionHelper, error) {
+	var mh ConnectionHelper = ConnectionHelper{}
 	mh.Init()
-	mh.Connection()
-	return mh
+	err := mh.Connection()
+	return mh, err
 }
 
-type MongoHelper struct {
+type ConnectionHelper struct {
 	client *mongo.Client
 	url    string
 	ctx    context.Context
 	// collection mongo.Collection
 }
 
-func (mh *MongoHelper) Init() {
+func (mh *ConnectionHelper) Init() {
 	var url string = "mongodb://167.179.80.227:5569"
 	mh.url = url
 }
 
-func (mh *MongoHelper) Connection() {
+func (mh *ConnectionHelper) Connection() error {
+	var err error
 	client, err := mongo.NewClient(options.Client().ApplyURI(mh.url))
 
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 	mh.client = client
 	mh.ctx = ctx
+	return err
 }
 
-func (mh *MongoHelper) GetCollection(dbName string, collectionName string) *mongo.Collection {
+func (mh *ConnectionHelper) GetCollection(dbName string, collectionName string) *mongo.Collection {
 	db := mh.client.Database(dbName)
 	collection := db.Collection(collectionName)
 	return collection
 }
 
-func (mh *MongoHelper) DisConnection() {
+func (mh *ConnectionHelper) DisConnection() {
 	mh.client.Disconnect(mh.ctx)
 }
 
-func (mh *MongoHelper) DropCollection(collection *mongo.Collection) {
+func (mh *ConnectionHelper) DropCollection(collection *mongo.Collection) {
 	collection.Drop(mh.ctx)
 }
 
@@ -71,81 +75,76 @@ func MakeErrResp(err string) gin.H {
 	return res
 }
 
-func InsertOne(collection *mongo.Collection, data map[string]interface{}, dataName string) gin.H {
-
+func InsertOne(collection *mongo.Collection,
+	data map[string]interface{}, dataName string) (gin.H, error) {
 	insertResult, err := collection.InsertOne(context.TODO(), data)
 	if err != nil {
-		// log.Fatal(err)
 		// logHelper.LogToFile(err.Error())
-		return MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
 
-	fmt.Println("Inserted a single document: ", insertResult)
+	// fmt.Println("Inserted a single document: ", insertResult)
 	return gin.H{
 		"status": "ok",
 		dataName: insertResult.InsertedID,
-	}
+	}, err
 }
 
-func DeleteOne(collection *mongo.Collection, filter bson.M, dataName string) gin.H {
+func DeleteOne(collection *mongo.Collection, filter bson.M, dataName string) (gin.H, error) {
 	res, err := collection.DeleteOne(context.TODO(), filter)
 	if err != nil {
 		// logHelper.LogToFile(err.Error())
-		return MakeErrResp(err.Error())
+		// return MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
-
 	return gin.H{
 		"status": "ok",
 		dataName: res.DeletedCount,
-	}
-
+	}, err
 }
 
 func UpdateOne(collection *mongo.Collection, filter bson.D, data bson.D,
-	resName string) gin.H {
+	resName string) (gin.H, error) {
 	result, err := collection.UpdateOne(context.TODO(), filter, data)
 	if err != nil {
 		// logHelper.LogToFile(err.Error())
-		return MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
 
 	if result.MatchedCount == 0 {
 		// fmt.Println("matched and replaced an existing document")
-		return gin.H{
-			"status": "ok",
-			resName:  "user not found",
-		}
+		err = errors.New("there is no user in db")
+		return gin.H{}, err
 	}
-	// if result.UpsertedCount != 0 {
-	// 	fmt.Printf("inserted a new document with ID %v\n", result.UpsertedID)
-	// }
 	return gin.H{
 		"status": "ok",
 		resName:  "updated",
-	}
+	}, err
 }
 
-func GetOne(collection *mongo.Collection, filter bson.M, rowName string) gin.H {
+func GetOne(collection *mongo.Collection, filter bson.M, rowName string) (gin.H, error) {
 	var result bson.M
 	// var filter bson.D = bson.D{}
 	err := collection.FindOne(context.TODO(), filter).Decode(&result)
 	if err != nil {
 		// logHelper.LogToFile(err.Error())
-		return MakeErrResp(err.Error())
+		// return MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
 	// fmt.Printf("Found a single document: %+v\n", result)
 	return gin.H{
 		"status": "ok",
 		rowName:  result,
-	}
+	}, err
 }
 
-func GetMany(collection *mongo.Collection, filter bson.M, rowName string) gin.H {
+func GetMany(collection *mongo.Collection, filter bson.M, rowName string) (gin.H, error) {
 	// var results []bson.M
 	count, err := collection.CountDocuments(context.TODO(), filter)
 	if err != nil {
 		// logHelper.LogToFile(err.Error())
-		MakeErrResp(err.Error())
+		// MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
 	var results []bson.M = make([]bson.M, count)
 
@@ -154,7 +153,8 @@ func GetMany(collection *mongo.Collection, filter bson.M, rowName string) gin.H 
 	if err != nil {
 		// log.Fatal(err)
 		// logHelper.LogToFile(err.Error())
-		MakeErrResp(err.Error())
+		// MakeErrResp(err.Error())
+		return gin.H{}, err
 	}
 	// Finding multiple documents returns a cursor
 	// Iterating through the cursor allows us to decode documents one at a time
@@ -167,7 +167,7 @@ func GetMany(collection *mongo.Collection, filter bson.M, rowName string) gin.H 
 			// log.Fatal(err)
 			// logHelper.LogToFile(err.Error())
 
-			return MakeErrResp(err.Error())
+			return gin.H{}, err
 		}
 		// fmt.Println("res", elem)
 
@@ -181,5 +181,5 @@ func GetMany(collection *mongo.Collection, filter bson.M, rowName string) gin.H 
 	return gin.H{
 		"status": "ok",
 		rowName:  results,
-	}
+	}, err
 }
